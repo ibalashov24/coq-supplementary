@@ -49,6 +49,7 @@ Section S.
     apply st_binds_hd.
   Qed.
 
+  
   Lemma update_neq (st : state) (x2 x1 : id) (n m : A)
         (NEQ : x2 <> x1) : st / x1 => m <-> st [x2 <- n] / x1 => m.
   Proof.
@@ -69,7 +70,7 @@ Section S.
     - intros H.
       inversion H.
       apply st_binds_hd. apply st_binds_tl.
-      auto. 
+      auto.  
       apply update_neq in H6.
       auto. auto.
     - intros H.

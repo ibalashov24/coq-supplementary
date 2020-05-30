@@ -90,7 +90,8 @@ Module SmokeTest.
   (* Associativity of sequential composition *)
   Lemma seq_assoc (s1 s2 s3 : stmt) :
     ((s1 ;; s2) ;; s3) ~~~ (s1 ;; (s2 ;; s3)).
-  Proof. admit. Admitted.
+  Proof.
+    
   
   (* One-step unfolding *)
   Lemma while_unfolds (e : expr) (s : stmt) :
