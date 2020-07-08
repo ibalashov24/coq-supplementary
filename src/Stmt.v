@@ -556,7 +556,8 @@ Module SmallStep.
         apply ss_While.
         apply ss_int_Step with (s;; (WHILE e DO s END)) (st, i, o).
         apply ss_If_True. auto. auto.
-      + apply ss_int_Step
+      + (* TODO Make easier proof ??*)
+        apply ss_int_Step
           with (COND e THEN s ;; WHILE e DO s END ELSE SKIP END) (st, i, o).
         apply ss_While.
         apply ss_int_Step with (SKIP) (st, i, o).
@@ -565,18 +566,7 @@ Module SmallStep.
     - induction H.
       + apply ss_bs_base. auto.
       + apply ss_bs_step with (c') (s'). auto. auto.
-  Qed.
-         
-                                    
-        
-          
-                                   
-             
-                            
-          
-         
-      
-  
+  Qed.      
 End SmallStep.
 
 (* CPS semantics *)
@@ -637,43 +627,138 @@ Inductive cps_int : cont -> cont -> conf -> conf -> Prop :=
                            (k : cont) (e : expr) (s : stmt)
                       (CVAL : [| e |] st => Z.zero)
                       (CSTEP : KEmpty |- (st, i, o) -- k --> c'),
-    k |- (st, i, o) -- !(WHILE e DO s END) --> c'
+    k |- (st, i, o) -- !(WHILE e DO s END) --> c'                
 where "k |- c1 -- s --> c2" := (cps_int k s c1 c2).
 
 Ltac cps_bs_gen_helper k H HH :=
   destruct k eqn:K; subst; inversion H; subst;
   [inversion EXEC; subst | eapply bs_Seq; eauto];
   apply HH; auto.
-    
+
 Lemma cps_bs_gen (S : stmt) (c c' : conf) (S1 k : cont)
       (EXEC : k |- c -- S1 --> c') (DEF : !S = S1 @ k):
   c == S ==> c'.
-Proof. admit. Admitted.
-
+Proof.
+  generalize dependent S.
+  induction EXEC; intros.
+  - inversion DEF.
+  - cps_bs_gen_helper k DEF bs_Skip.
+  - cps_bs_gen_helper k DEF bs_Assign.
+  - cps_bs_gen_helper k DEF bs_Read.
+  - cps_bs_gen_helper k DEF bs_Write.
+  - destruct k.
+    + apply (IHEXEC S). apply DEF.
+    + inversion DEF.
+      apply SmokeTest.seq_assoc.
+      apply IHEXEC. auto.
+  - destruct k; inversion DEF.
+    + subst. apply bs_If_True.
+      auto. auto.
+    + assert ((s, i, o) == s1 ;; s0 ==> (c')).
+      { apply IHEXEC. auto. }
+      inversion H. subst.
+      apply bs_Seq with (c'0). apply bs_If_True.
+      auto. auto. auto.
+  - destruct k; inversion DEF.
+    + subst. apply bs_If_False. auto. auto.
+    + assert ((s, i, o) == s2 ;; s0 ==> (c')).
+      { apply IHEXEC. auto. }
+      inversion H. subst.
+      apply bs_Seq with (c'0). apply bs_If_False.
+      auto. auto. auto.
+  - destruct k; inversion DEF.
+    + subst.
+      assert ((st, i, o) == s ;; (WHILE e DO s END) ==> c').
+      { auto. }
+      inversion H. subst.
+      apply bs_While_True with (c'0).
+      auto. auto. auto.
+    + subst.
+      assert ((st, i, o) == s ;; (WHILE e DO s END) ;; s0 ==> c').
+      { auto. }
+      inversion H. subst.
+      inversion_clear STEP2. apply bs_Seq with (c'1).
+      apply bs_While_True with (c'0).
+      auto. auto. auto. auto.
+  - cps_bs_gen_helper k DEF bs_While_False.
+Qed.
+        
 Lemma cps_bs (s1 s2 : stmt) (c c' : conf) (STEP : !s2 |- c -- !s1 --> c'):
    c == s1 ;; s2 ==> c'.
-Proof. admit. Admitted.
+Proof.
+  apply (cps_bs_gen (s1 ;; s2) c c' !(s1) !(s2) STEP).
+  auto.
+Qed.
 
 Lemma cps_int_to_bs_int (c c' : conf) (s : stmt)
       (STEP : KEmpty |- c -- !(s) --> c') : 
   c == s ==> c'.
-Proof. admit. Admitted.
+Proof.
+  apply (cps_bs_gen (s) c c' !(s) KEmpty STEP).
+  auto.
+Qed.
 
 Lemma cps_cont_to_seq c1 c2 k1 k2 k3
       (STEP : (k2 @ k3 |- c1 -- k1 --> c2)) :
   (k3 |- c1 -- k1 @ k2 --> c2).
-Proof. admit. Admitted.
-
+Proof.
+  destruct k1; destruct k2; unfold Kapp.
+  - auto.
+  - destruct k3; unfold Kapp in STEP; inversion STEP.
+  - unfold Kapp in STEP. auto.
+  - apply cps_Seq. auto.
+Qed.
+             
 Lemma bs_int_to_cps_int_cont c1 c2 c3 s k
       (EXEC : c1 == s ==> c2)
       (STEP : k |- c2 -- !(SKIP) --> c3) :
   k |- c1 -- !(s) --> c3.
-Proof. admit. Admitted.
-
+Proof.
+  generalize dependent k.
+  induction EXEC; intros.
+  - auto.
+  - apply cps_Assign with (z). auto.
+    inversion STEP. auto.
+  - apply cps_Read.
+    inversion STEP.
+    auto.
+  - apply cps_Write with (z). auto.
+    inversion STEP. auto.
+  - apply cps_Seq. apply IHEXEC1.
+    apply cps_Skip.
+    apply cps_cont_to_seq.
+    apply IHEXEC2.
+    destruct k. auto. auto.
+  - apply cps_If_True. auto. auto.
+  - apply cps_If_False. auto. auto.
+  - apply cps_While_True. auto.
+    apply IHEXEC1.
+    apply cps_Skip. apply cps_cont_to_seq. 
+    destruct k. auto. auto.
+  - apply cps_While_False. auto.
+    inversion_clear STEP. auto.
+Qed.
+    
 Lemma bs_int_to_cps_int st i o c' s (EXEC : (st, i, o) == s ==> c') :
   KEmpty |- (st, i, o) -- !s --> c'.
-Proof. admit. Admitted.
-
+Proof.
+  induction EXEC.
+  - constructor. constructor.
+  - econstructor. apply VAL. constructor.
+  - constructor. constructor.
+  - econstructor. apply VAL. constructor.
+  - constructor.
+    apply bs_int_to_cps_int_cont with (c').
+    auto. constructor. auto.
+  - constructor. auto. auto.
+  - apply cps_If_False. auto. auto.
+  - constructor. auto.
+    apply bs_int_to_cps_int_cont with (c').
+    auto. constructor. auto.
+  - apply cps_While_False. auto.
+    constructor.
+Qed.  
+    
 (* Lemma cps_stmt_assoc s1 s2 s3 s (c c' : conf) : *)
 (*   (! (s1 ;; s2 ;; s3)) |- c -- ! (s) --> (c') <-> *)
 (*   (! ((s1 ;; s2) ;; s3)) |- c -- ! (s) --> (c'). *)
